@@ -1,0 +1,434 @@
+---
+marp: true
+theme: default
+paginate: true
+---
+
+# Rust Compilation Process
+## From Source to Executable
+
+Following "Hello, world!" through 6 transformation stages
+
+---
+
+## Why This Matters
+
+- **Understanding errors**: Know where compiler messages come from
+- **Debugging skills**: Know which artifact to examine
+- **Optimization insights**: See what the compiler generates
+- **Appreciating Rust's guarantees**: See the borrow checker in action
+
+---
+
+## Our Starting Point
+
+```rust
+fn main() {
+    println!("Hello, world!");
+}
+```
+
+**Just 3 lines of code**
+But what really happens behind the scenes?
+
+---
+
+## The Compilation Pipeline
+
+```
+Source Code 
+  ↓
+Tokens → AST → HIR → MIR → LLVM IR → Assembly → Machine Code
+```
+
+- Each stage: different representation, different purpose
+- We'll examine the actual artifacts at each stage
+- Don't worry - we'll explain each one!
+
+---
+
+## Stage 1: AST (Abstract Syntax Tree)
+
+**Command**: `cargo rustc -- -Z unpretty=ast-tree`
+
+**What happens**:
+- Lexing: source text broken into tokens (like words in a sentence)
+- Parsing: tokens arranged into tree structure
+- No semantic analysis yet - just structure
+
+**Think of it as**: The compiler's first understanding of your code's structure
+
+---
+
+## AST Output - The Structure
+
+```
+Crate {
+    items: [
+        Item {
+            kind: Fn(
+                Fn {
+                    ident: main#0,
+                    sig: FnSig {
+                        header: FnHeader { ... },
+                        decl: FnDecl {
+                            inputs: [],
+                            output: Default,
+                        },
+                    },
+```
+
+---
+
+## AST Output - The Body
+
+```
+                    body: Some(
+                        Block {
+                            stmts: [
+                                Stmt {
+                                    kind: MacCall(
+                                        MacCallStmt {
+                                            mac: MacCall {
+                                                path: Path {
+                                                    segments: [
+                                                        PathSegment {
+                                                            ident: println#0,
+```
+
+---
+
+## AST Output - Key Observations
+
+- `println!` appears as `MacCall` - macro not expanded yet
+- Structure shows: function signature, parameters, return type
+- `NodeId`s everywhere for tracking elements
+
+**What to see**:
+- Function declaration structure
+- Macro still unexpanded
+- Just syntax, no meaning yet
+
+---
+
+## Stage 2: Macro Expansion & HIR
+
+**Command**: `cargo expand`
+
+**What happens**:
+- Macros expanded to actual Rust code
+- "Syntactic sugar" removed (desugaring)
+- Names resolved to their definitions
+- Produces HIR (High-level Intermediate Representation)
+
+---
+
+## HIR Output - The Complete Expansion
+
+```rust
+#![feature(prelude_import)]
+#[macro_use]
+extern crate std;
+#[prelude_import]
+use std::prelude::rust_2024::*;
+
+fn main() {
+    {
+        ::std::io::_print(format_args!("Hello, world!\n"));
+    };
+}
+```
+
+---
+
+## HIR - What Changed?
+
+**Before (source)**:
+```rust
+fn main() {
+    println!("Hello, world!");
+}
+```
+
+**After (HIR)**:
+```rust
+fn main() {
+    {
+        ::std::io::_print(format_args!("Hello, world!\n"));
+    };
+}
+```
+
+---
+
+## HIR - What Happens Here
+
+- The "magic" of macros revealed - now it's just function calls
+- Prelude imports made explicit (normally hidden)
+- This is what the compiler actually sees
+
+**Type checking happens at this stage**:
+- Type inference figures out types you didn't write
+- Trait resolution (which implementations to use)
+- Types are validated and errors reported
+
+**Why this matters**: When you get a compiler error mentioning `format_args!` or type mismatches, this is the representation being analyzed
+
+---
+
+## Stage 3: MIR (Mid-level Intermediate Representation)
+
+**Command**: `cargo rustc -- --emit mir`
+
+**What happens**:
+- Code lowered to control-flow graph
+- Split into "basic blocks" (bb0, bb1, bb2, etc.)
+- Makes control flow and cleanup explicit
+
+**Think of it as**: A step-by-step instruction list that's easier for the compiler to reason about
+
+---
+
+## MIR Output - The Complete Representation
+
+```
+// WARNING: This output format is intended for human consumers only
+// and is subject to change without notice. Knock yourself out.
+// HINT: See also -Z dump-mir for MIR at specific points during compilation.
+
+fn main() -> () {
+    let mut _0: ();
+    let _1: ();
+    let mut _2: std::fmt::Arguments<'_>;
+
+    bb0: {
+        _2 = Arguments::<'_>::from_str(const "Hello, world!\n") 
+             -> [return: bb1, unwind continue];
+    }
+```
+
+---
+
+## MIR Output - Continued
+
+```
+    bb1: {
+        _1 = _print(move _2) -> [return: bb2, unwind continue];
+    }
+
+    bb2: {
+        return;
+    }
+}
+
+alloc1 (size: 14, align: 1) {
+    48 65 6c 6c 6f 2c 20 77 6f 72 6c 64 21 0a       │ Hello, world!.
+}
+```
+
+---
+
+## MIR - What to See
+
+- **Three basic blocks**: create arguments → print → return
+- **Explicit temporaries** (_0, _1, _2) - intermediate values
+- **String data** stored separately (alloc1) with hex representation
+- **"unwind"** shows what happens if something panics
+- **Much simpler** representation than the source!
+
+The flow: bb0 creates Arguments → bb1 calls _print → bb2 returns
+
+---
+
+## MIR - The Borrow Checker's Playground
+
+**The famous borrow checker runs on MIR**:
+- Control flow graph makes it easy to track variable lifetimes
+- Explicit moves (`move _2`) show ownership transfers
+- Clear basic blocks show exactly where borrows begin and end
+- Unwind paths help verify cleanup happens correctly
+
+**For our example**:
+- Very simple - minimal checking needed
+- No borrowing or complex lifetimes to verify
+
+**This is Rust's superpower**: The borrow checker catches memory bugs at compile time, without needing garbage collection!
+
+---
+
+## Stage 4: LLVM IR (LLVM Intermediate Representation)
+
+**Command**: `cargo rustc -- --emit llvm-ir`
+
+**What happens**:
+- Translated to LLVM's intermediate representation
+- Platform-independent (same IR for Windows, Mac, Linux)
+- Ready for optimization
+
+**Why so verbose?**: LLVM needs explicit information to optimize safely
+
+---
+
+## LLVM IR - Key Observations
+
+- Very verbose (~300+ lines for Hello World!)
+- Function names are "mangled" (encoded):
+  - `_RNvCs3blwfe8V9b3_17seminar_rust_demo4main` (our main)
+  - Includes crate name, version info, etc.
+- String literal gets a unique identifier
+- Type information fully preserved
+- Debug metadata for debuggers
+- Runtime initialization code visible
+
+---
+
+## LLVM IR - What to See
+
+- How much infrastructure surrounds our simple program
+- Stack allocations (`alloca`) for local variables
+- Function calls explicitly laid out
+- Target info: `x86_64-unknown-linux-gnu`
+
+---
+
+## Stage 5: Assembly Code
+
+**Command**: `cargo rustc -- --emit asm`
+
+**What happens**:
+- LLVM runs optimization passes
+- Generates actual CPU instructions
+- Platform-specific (different for Intel vs ARM, etc.)
+
+**Think of it as**: The actual instructions the CPU will execute
+
+---
+
+## Assembly Output - Our Main Function
+
+```asm
+pushq   %rax              # Save stack space
+leaq    .Lanon...1(%rip), %rdi    # Load string address
+movl    $14, %esi         # String length = 14
+callq   ...from_str       # Create Arguments
+callq   ..._print         # Print it
+popq    %rax              # Restore stack
+retq                      # Return
+```
+
+Platform-specific (x86-64 assembly)
+
+---
+
+## Assembly - What to See
+
+- **Registers** (rax, rdi, rsi) - CPU's fast storage locations
+- **Stack operations** (push/pop) for function calls
+- **Function calls** (callq)
+- **Labels** marking code sections
+- **Debug information** sections
+
+---
+
+## Stage 6: Linking
+
+**Command**: `cargo build --verbose`
+
+**What happens**:
+- Object files combined into one executable
+- Standard library code linked in
+- External dependencies resolved
+- Final executable created
+
+---
+
+## Linking - What to Observe
+
+- Linker invocation in verbose output
+- All dependencies being pulled together
+- Final binary: `target/debug/seminar-rust-demo`
+
+**Run it**: `./target/debug/seminar-rust-demo`
+- Output: `Hello, world!`
+- **We've come full circle!**
+
+---
+
+## Debug vs Release Builds
+
+**Two compilation modes**:
+- Debug: `cargo build` (what we've been using)
+- Release: `cargo build --release`
+
+---
+
+## Debug vs Release - Key Differences
+
+| Aspect | Debug | Release |
+|--------|-------|---------|
+| **Optimization level** | 0 | 3 |
+| **Binary size** | Larger | Smaller |
+| **Speed** | Slower | Much faster |
+| **Debug info** | Full | Minimal |
+
+---
+
+## Debug vs Release - When to Use Each
+
+**Debug**:
+- During development
+- When you need error messages and debugging
+- Preserves structure, easier to debug
+
+**Release**:
+- For production
+- Benchmarks or final distribution
+- Heavily optimized, functions inlined
+
+---
+
+## Summary - What We Learned
+
+One simple program goes through 6+ transformations:
+
+1. **AST**: Understanding syntax structure
+2. **HIR**: Macros expanded, code desugared, **type checking**
+3. **MIR**: Control flow made explicit, **borrow checking**
+4. **LLVM IR**: Ready for optimization
+5. **Assembly**: Real CPU instructions
+6. **Linking**: Final executable
+
+---
+
+## Why This Matters for You
+
+- **Better understanding of error messages** - now you know where they come from
+- **Debugging skills** - know which artifact to examine
+- **Optimization insights** - see what the compiler actually generates
+- **Appreciation for Rust's guarantees** - see the borrow checker in action
+
+---
+
+## Key Takeaways
+
+- **Compilation is complex** - but each stage is logical and purposeful
+- **Rust's safety comes from compile-time analysis** - the borrow checker runs before code generation
+- **You can inspect everything** - the compiler hides nothing from you
+- **3 lines of source ≠ 3 lines of machine code** - substantial infrastructure supports even simple programs
+
+---
+
+## Key Takeaways (continued)
+
+**This complexity gives you**:
+- Memory safety
+- Zero-cost abstractions
+- Blazing performance
+
+**Final thought**: Understanding the compilation process helps you write better Rust code and debug issues faster
+
+---
+
+## Questions?
+
+Thank you!
