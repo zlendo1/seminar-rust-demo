@@ -412,28 +412,61 @@ Platform-specific (x86-64 assembly)
 
 ---
 
-## Debug vs Release - Key Differences
+## Optimization Levels Explained
 
-| Aspect | Debug | Release |
-|--------|-------|---------|
-| **Optimization level** | 0 | 3 |
-| **Binary size** | Larger | Smaller |
-| **Speed** | Slower | Much faster |
-| **Debug info** | Full | Minimal |
+**Rust uses LLVM optimization levels (0-3, s, z)**:
+
+| Level | Flag | Description |
+|-------|------|-------------|
+| **0** | Debug default | No optimization, fastest compile |
+| **1** | `opt-level = 1` | Basic optimization |
+| **2** | `opt-level = 2` | Some optimization |
+| **3** | Release default | Full optimization, slowest compile |
+| **s** | `opt-level = "s"` | Optimize for size |
+| **z** | `opt-level = "z"` | Aggressively optimize for size |
 
 ---
 
-## Debug vs Release - When to Use Each
+## Debug vs Release - Key Differences
 
-**Debug**:
-- During development
-- When you need error messages and debugging
-- Preserves structure, easier to debug
+| Aspect | Debug (opt-level 0) | Release (opt-level 3) |
+|--------|---------------------|----------------------|
+| **Compilation** | Fast | Slower |
+| **Binary size** | Larger | Smaller |
+| **Runtime speed** | Slower | Much faster |
+| **Debug info** | Full | Minimal |
+| **Optimizations** | None | Aggressive |
+| **Stack traces** | Readable | May be inlined/optimized away |
 
-**Release**:
-- For production
-- Benchmarks or final distribution
-- Heavily optimized, functions inlined
+---
+
+## What Optimizations Do
+
+**At opt-level 3, LLVM performs**:
+- **Function inlining**: Small functions copied into callers
+- **Dead code elimination**: Unused code removed
+- **Constant folding**: Compile-time computation
+- **Loop unrolling**: Loops expanded for speed
+- **Vectorization**: Using SIMD instructions
+- **And many more**: 100+ optimization passes
+
+**Result**: Code can be 10-100x faster, but harder to debug
+
+---
+
+## When to Use Each Build Type
+
+**Debug (opt-level 0)**:
+- Fast iteration: quick compile, run, test cycle
+- Debugging (clear error messages and stack traces)
+
+**Release (opt-level 3)**:
+- Production deployments
+- Performance benchmarking (always benchmark in release!)
+
+**Custom optimization**:
+- Use `opt-level = 2` for a middle ground
+- Use `opt-level = "s"` for embedded systems (size matters)
 
 ---
 
