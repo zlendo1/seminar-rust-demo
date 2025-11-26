@@ -324,6 +324,41 @@ This is Rust's way of moving runtime polymorphism to compile time!
 
 ---
 
+## LLVM IR Output - Our Main Function
+
+```llvm
+define hidden void @_RNvCs3blwfe8V9b3_17seminar_rust_demo4main() {
+start:
+; call <core::fmt::Arguments>::from_str
+  %0 = call { ptr, ptr } @_RNvMs4_NtCsfUQRuWBI3tk_4core3fmtNtB5_9Arguments8from_str(
+    ptr align 1 @alloc_3213114faf700a46436312d7d5d956d1, 
+    i64 14
+  )
+  %_2.0 = extractvalue { ptr, ptr } %0, 0
+  %_2.1 = extractvalue { ptr, ptr } %0, 1
+; call std::io::stdio::_print
+  call void @_ZN3std2io5stdio6_print17h1c8ea388148cf1c0E(
+    ptr %_2.0, 
+    ptr %_2.1
+  )
+  ret void
+}
+```
+
+---
+
+## LLVM IR - String Allocation
+
+```llvm
+@alloc_3213114faf700a46436312d7d5d956d1 = 
+  private unnamed_addr constant [14 x i8] c"Hello, world!\0A", 
+  align 1
+```
+
+The string literal is stored as a global constant with a unique identifier
+
+---
+
 ## Stage 5: Assembly Code
 
 **Command**: `cargo rustc -- --emit asm`
