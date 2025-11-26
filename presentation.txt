@@ -47,6 +47,21 @@ Tokens → AST → HIR → MIR → LLVM IR → Assembly → Machine Code
 
 ---
 
+## Understanding Compilation Units
+
+**In Rust, a crate is the compilation unit**:
+- The entire crate is compiled together as one unit
+- Different from C/C++ where each source file is independent
+
+**Implications**:
+- A change in one file might require recompiling the whole crate (worst case)
+- **Incremental compilation** helps: only recompiles what changed
+- Crates are the building blocks: binary crates (executables) or library crates
+
+**Trade-off**: Whole-crate compilation enables better optimization but can be slower for large projects
+
+---
+
 ## Stage 1: AST (Abstract Syntax Tree)
 
 **Command**: `cargo rustc -- -Z unpretty=ast-tree`
@@ -256,6 +271,24 @@ The flow: bb0 creates Arguments → bb1 calls _print → bb2 returns
 
 ---
 
+## Monomorphization - Compile-Time Magic
+
+**After MIR, monomorphization happens**:
+- Generic code (using traits) is turned into concrete implementations
+- Each unique type gets its own specialized function
+
+**Example**: `Vec<i32>`, `Vec<String>`, `Vec<MyStruct>` each get their own optimized code
+
+**Consequences**:
+- **Zero-cost abstractions**: No runtime overhead for generics
+- **Better optimization**: Compiler knows exact types
+- **Larger binaries**: More code generated
+- **Longer compile times**: More code to compile
+
+This is Rust's way of moving runtime polymorphism to compile time!
+
+---
+
 ## Stage 4: LLVM IR (LLVM Intermediate Representation)
 
 **Command**: `cargo rustc -- --emit llvm-ir`
@@ -354,6 +387,23 @@ Platform-specific (x86-64 assembly)
 
 ---
 
+## Static vs Dynamic Linking in Rust
+
+**Rust prefers static linking**:
+- All dependencies compiled into the final binary
+- Different from C/C++ which favor dynamic linking (.dll, .so files)
+
+**Why Rust binaries can be large**:
+1. **Static linking**: Entire standard library and dependencies included
+2. **Monomorphization**: Multiple specialized versions of generic code
+3. **Debug info**: Debug builds include extensive metadata
+
+**Benefits**:
+- Single executable -> easy deployment + no external dependencies
+- Predictable behavior across systems
+
+---
+
 ## Debug vs Release Builds
 
 **Two compilation modes**:
@@ -391,12 +441,14 @@ Platform-specific (x86-64 assembly)
 
 One simple program goes through 6+ transformations:
 
-1. **AST**: Understanding syntax structure
-2. **HIR**: Macros expanded, code desugared, **type checking**
-3. **MIR**: Control flow made explicit, **borrow checking**
-4. **LLVM IR**: Ready for optimization
-5. **Assembly**: Real CPU instructions
-6. **Linking**: Final executable
+1. **Compilation unit** (crate-level): Whole crate compiled together
+2. **AST**: Understanding syntax structure
+3. **HIR**: Macros expanded, code desugared, **type checking**
+4. **MIR**: Control flow made explicit, **borrow checking**
+5. **Monomorphization**: Generics become concrete code
+6. **LLVM IR**: Ready for optimization
+7. **Assembly**: Real CPU instructions
+8. **Linking**: Final executable (statically linked)
 
 ---
 
@@ -413,17 +465,20 @@ One simple program goes through 6+ transformations:
 
 - **Compilation is complex** - but each stage is logical and purposeful
 - **Rust's safety comes from compile-time analysis** - the borrow checker runs before code generation
+- **Crate-level compilation** - enables better optimization but can require more recompilation
+- **Monomorphization** - zero-cost abstractions by generating specialized code
+- **Static linking** - self-contained binaries that are larger but portable
 - **You can inspect everything** - the compiler hides nothing from you
-- **3 lines of source ≠ 3 lines of machine code** - substantial infrastructure supports even simple programs
 
 ---
 
 ## Key Takeaways (continued)
 
 **This complexity gives you**:
-- Memory safety
-- Zero-cost abstractions
+- Memory safety without garbage collection
+- Zero-cost abstractions (no runtime overhead)
 - Blazing performance
+- Single-binary deployment
 
 **Final thought**: Understanding the compilation process helps you write better Rust code and debug issues faster
 
